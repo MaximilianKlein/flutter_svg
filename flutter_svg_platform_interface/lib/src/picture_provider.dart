@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui'
     show BlendMode, Color, ColorFilter, Locale, Rect, TextDirection, hashValues;
@@ -15,7 +14,6 @@ import 'package:flutter/widgets.dart'
 
 import 'picture_cache.dart';
 import 'picture_stream.dart';
-import 'utilities/http.dart';
 
 typedef PictureInfoDecoder<T> = Future<PictureInfo> Function(
     T data, ColorFilter colorFilter, String key);
@@ -456,145 +454,6 @@ abstract class AssetBundlePictureProvider
     }
     return decoder(data, key.colorFilter, key.toString());
   }
-}
-
-/// Fetches the given URL from the network, associating it with the given scale.
-///
-/// The picture will be cached regardless of cache headers from the server.
-///
-/// See also:
-///
-///  * [SvgPicture.network] for a shorthand of an [SvgPicture] widget backed by [NetworkPicture].
-// TODO(ianh): Find some way to honour cache headers to the extent that when the
-// last reference to a picture is released, we proactively evict the picture from
-// our cache if the headers describe the picture as having expired at that point.
-class NetworkPicture extends PictureProvider<NetworkPicture> {
-  /// Creates an object that fetches the picture at the given URL.
-  ///
-  /// The arguments must not be null.
-  const NetworkPicture(this.decoder, this.url, {this.headers, this.colorFilter})
-      : assert(url != null);
-
-  /// The decoder to use to turn a [Uint8List] into a [PictureInfo] object.
-  final PictureInfoDecoder<Uint8List> decoder;
-
-  /// The URL from which the picture will be fetched.
-  final String url;
-
-  /// The HTTP headers that will be used with [HttpClient.get] to fetch picture from network.
-  final Map<String, String> headers;
-
-  /// The [ColorFilter], if any, to apply to the drawing.
-  final ColorFilter colorFilter;
-
-  @override
-  Future<NetworkPicture> obtainKey(PictureConfiguration picture) {
-    return SynchronousFuture<NetworkPicture>(this);
-  }
-
-  @override
-  PictureStreamCompleter load(NetworkPicture key,
-      {PictureErrorListener onError}) {
-    return OneFramePictureStreamCompleter(_loadAsync(key, onError: onError),
-        informationCollector: () sync* {
-      yield DiagnosticsProperty<PictureProvider>('Picture provider', this);
-      yield DiagnosticsProperty<NetworkPicture>('Picture key', key);
-    });
-  }
-
-  Future<PictureInfo> _loadAsync(NetworkPicture key,
-      {PictureErrorListener onError}) async {
-    assert(key == this);
-    final Uint8List bytes = await httpGet(url);
-    if (onError != null) {
-      return decoder(bytes, colorFilter, key.toString())..catchError(onError);
-    }
-    return decoder(bytes, colorFilter, key.toString());
-  }
-
-  @override
-  bool operator ==(dynamic other) {
-    if (other.runtimeType != runtimeType) {
-      return false;
-    }
-    final NetworkPicture typedOther = other;
-    return url == typedOther.url && colorFilter == typedOther.colorFilter;
-  }
-
-  @override
-  int get hashCode => hashValues(url.hashCode, colorFilter);
-
-  @override
-  String toString() =>
-      '$runtimeType("$url", headers: $headers, colorFilter: $colorFilter)';
-}
-
-/// Decodes the given [File] object as a picture, associating it with the given
-/// scale.
-///
-/// See also:
-///
-///  * [SvgPicture.file] for a shorthand of an [SvgPicture] widget backed by [FilePicture].
-class FilePicture extends PictureProvider<FilePicture> {
-  /// Creates an object that decodes a [File] as a picture.
-  ///
-  /// The arguments must not be null.
-  const FilePicture(this.decoder, this.file, {this.colorFilter})
-      : assert(decoder != null),
-        assert(file != null);
-
-  /// The file to decode into a picture.
-  final File file;
-
-  /// The [PictureInfoDecoder] to use for loading this picture.
-  final PictureInfoDecoder<Uint8List> decoder;
-
-  /// The [ColorFilter], if any, to use when drawing this picture.
-  final ColorFilter colorFilter;
-
-  @override
-  Future<FilePicture> obtainKey(PictureConfiguration picture) {
-    return SynchronousFuture<FilePicture>(this);
-  }
-
-  @override
-  PictureStreamCompleter load(FilePicture key, {PictureErrorListener onError}) {
-    return OneFramePictureStreamCompleter(_loadAsync(key, onError: onError),
-        informationCollector: () sync* {
-      yield DiagnosticsProperty<String>('Path', file?.path);
-    });
-  }
-
-  Future<PictureInfo> _loadAsync(FilePicture key,
-      {PictureErrorListener onError}) async {
-    assert(key == this);
-
-    final Uint8List data = await file.readAsBytes();
-    if (data == null || data.isEmpty) {
-      return null;
-    }
-    if (onError != null) {
-      return decoder(data, colorFilter, key.toString())..catchError(onError);
-    }
-    return decoder(data, colorFilter, key.toString());
-  }
-
-  @override
-  bool operator ==(dynamic other) {
-    if (other.runtimeType != runtimeType) {
-      return false;
-    }
-    final FilePicture typedOther = other;
-    return file?.path == typedOther.file?.path &&
-        typedOther.colorFilter == colorFilter;
-  }
-
-  @override
-  int get hashCode => hashValues(file?.path?.hashCode, colorFilter);
-
-  @override
-  String toString() =>
-      '$runtimeType("${file?.path}", colorFilter: $colorFilter)';
 }
 
 /// Decodes the given [String] buffer as a picture, associating it with the

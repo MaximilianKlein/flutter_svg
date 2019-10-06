@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:meta/meta.dart';
 
-import 'picture_stream.dart';
+import 'package:flutter_svg_platform_interface/flutter_svg_platform_interface.dart';
 
 /// A widget that displays a [dart:ui.Picture] directly.
 @immutable

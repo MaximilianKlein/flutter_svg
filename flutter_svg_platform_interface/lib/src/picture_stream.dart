@@ -23,12 +23,14 @@ class _PictureListenerPair {
 class PictureInfo {
   /// Creates a new PictureInfo object.
   const PictureInfo({
-    @required this.picture,
-    @required this.viewport,
+    @required this.string,
+    this.picture,
+    this.viewport,
     this.size = Size.infinite,
-  })  : assert(picture != null),
-        assert(viewport != null),
-        assert(size != null);
+  }) : assert(picture != null || string != null);
+
+  /// The raw SVG string.
+  final String string;
 
   /// The raw picture.
   ///
@@ -43,7 +45,7 @@ class PictureInfo {
   final Size size;
 
   @override
-  int get hashCode => hashValues(picture, viewport, size);
+  int get hashCode => hashValues(string, picture, viewport, size);
 
   @override
   bool operator ==(Object other) {
@@ -51,7 +53,8 @@ class PictureInfo {
       return false;
     }
     final PictureInfo typedOther = other;
-    return typedOther.picture == picture &&
+    return typedOther.string == string &&
+        typedOther.picture == picture &&
         typedOther.viewport == viewport &&
         typedOther.size == size;
   }

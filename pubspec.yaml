@@ -9,6 +9,8 @@ dependencies:
   xml: ^3.3.1
   vector_math: ^2.0.4
   meta: ^1.1.2
+  flutter_svg_platform_interface:
+    path: flutter_svg_platform_interface
   flutter:
     sdk: flutter
 
@@ -22,6 +24,12 @@ dev_dependencies:
 environment:
   sdk: ">=2.2.0 <3.0.0"
   flutter: ">=1.5.9-pre.94 <2.0.0"
+
+flutter:
+  plugin:
+    platforms:
+      web:
+        default_package: web_flutter_svg
 
 ## For developing features that require new functionality in engine:
 # dependency_overrides:

@@ -9,11 +9,11 @@ import 'package:flutter/widgets.dart';
 import 'package:xml/xml.dart' hide parse;
 import 'package:xml/xml.dart' as xml show parse;
 
+import 'package:flutter_svg_platform_interface/flutter_svg_platform_interface.dart';
+
 import './svg.dart';
 import 'src/avd/xml_parsers.dart';
 import 'src/avd_parser.dart';
-import 'src/picture_provider.dart';
-import 'src/picture_stream.dart';
 import 'src/vector_drawable.dart';
 
 final Avd avd = Avd._();

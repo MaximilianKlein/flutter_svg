@@ -1,19 +1,18 @@
+library web_flutter_svg;
+
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:html' as html;
 import 'dart:typed_data';
-import 'dart:ui' show Picture;
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show AssetBundle;
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart';
+import 'package:universal_io/prefer_universal/io.dart';
 import 'package:flutter_svg_platform_interface/flutter_svg_platform_interface.dart';
-import 'package:flutter_svg/src/fire_picture_provider.dart';
-
-import 'parser.dart';
-import 'src/http_picture_provider.dart';
-import 'src/render_picture.dart';
-import 'src/vector_drawable.dart';
 
 /// Instance for [Svg]'s utility methods, which can produce a [DrawableRoot]
 /// or [PictureInfo] from [String] or [Uint8List].
@@ -43,15 +42,9 @@ class Svg {
     ColorFilter colorFilter,
     String key,
   ) async {
-    final DrawableRoot svgRoot = await fromSvgBytes(raw, key);
-    final Picture pic = svgRoot.toPicture(
-      clipToViewBox: allowDrawingOutsideOfViewBox == true ? false : true,
-      colorFilter: colorFilter,
-    );
+    final String rawString = utf8.decode(raw);
     return PictureInfo(
-      picture: pic,
-      viewport: svgRoot.viewport.viewBoxRect,
-      size: svgRoot.viewport.size,
+      string: rawString,
     );
   }
 
@@ -70,45 +63,9 @@ class Svg {
       bool allowDrawingOutsideOfViewBox,
       ColorFilter colorFilter,
       String key) async {
-    final DrawableRoot svg = await fromSvgString(raw, key);
     return PictureInfo(
-      picture: svg.toPicture(
-        clipToViewBox: allowDrawingOutsideOfViewBox == true ? false : true,
-        colorFilter: colorFilter,
-        size: svg.viewport.viewBox,
-      ),
-      viewport: svg.viewport.viewBoxRect,
-      size: svg.viewport.size,
+      string: raw,
     );
-  }
-
-  /// Produces a [Drawableroot] from a [Uint8List] of SVG byte data (assumes UTF8 encoding).
-  ///
-  /// The [key] will be used for debugging purposes.
-  FutureOr<DrawableRoot> fromSvgBytes(Uint8List raw, String key) async {
-    // TODO(dnfield): do utf decoding in another thread?
-    // Might just have to live with potentially slow(ish) decoding, this is causing errors.
-    // See: https://github.com/dart-lang/sdk/issues/31954
-    // See: https://github.com/flutter/flutter/blob/bf3bd7667f07709d0b817ebfcb6972782cfef637/packages/flutter/lib/src/services/asset_bundle.dart#L66
-    // if (raw.lengthInBytes < 20 * 1024) {
-    return fromSvgString(utf8.decode(raw), key);
-    // } else {
-    //   final String str =
-    //       await compute(_utf8Decode, raw, debugLabel: 'UTF8 decode for SVG');
-    //   return fromSvgString(str);
-    // }
-  }
-
-  // String _utf8Decode(Uint8List data) {
-  //   return utf8.decode(data);
-  // }
-
-  /// Creates a [DrawableRoot] from a string of SVG data.
-  ///
-  /// The `key` is used for debugging purposes.
-  Future<DrawableRoot> fromSvgString(String rawSvg, String key) async {
-    final SvgParser parser = SvgParser();
-    return await parser.parse(rawSvg, key: key);
   }
 }
 
@@ -172,34 +129,6 @@ Future<void> precachePicture(
   return completer.future;
 }
 
-class MobileSvgPicture implements SvgPicturePlatform {
-  @override
-  Widget build(PictureProvider pictureProvider,
-          {Key key,
-          double width,
-          double height,
-          BoxFit fit,
-          Alignment alignment,
-          bool matchTextDirection,
-          bool allowDrawingOutsideViewBox,
-          WidgetBuilder placeholderBuilder,
-          String semanticsLabel,
-          bool excludeFromSemantics}) =>
-      SvgPicture(
-        pictureProvider,
-        key: key,
-        width: width,
-        height: height,
-        fit: fit,
-        alignment: alignment,
-        matchTextDirection: matchTextDirection,
-        allowDrawingOutsideViewBox: allowDrawingOutsideViewBox,
-        placeholderBuilder: placeholderBuilder,
-        semanticsLabel: semanticsLabel,
-        excludeFromSemantics: excludeFromSemantics,
-      );
-}
-
 /// A widget that will parse SVG data into a [Picture] using a [PictureProvider].
 ///
 /// The picture will be cached using the [PictureCache], incorporating any color
@@ -238,6 +167,7 @@ class SvgPicture extends StatefulWidget {
     this.matchTextDirection = false,
     this.allowDrawingOutsideViewBox = false,
     this.placeholderBuilder,
+    this.color,
     this.semanticsLabel,
     this.excludeFromSemantics = false,
   }) : super(key: key);
@@ -331,7 +261,7 @@ class SvgPicture extends StatefulWidget {
     this.alignment = Alignment.center,
     this.allowDrawingOutsideViewBox = false,
     this.placeholderBuilder,
-    Color color,
+    this.color,
     BlendMode colorBlendMode = BlendMode.srcIn,
     this.semanticsLabel,
     this.excludeFromSemantics = false,
@@ -342,108 +272,6 @@ class SvgPicture extends StatefulWidget {
             assetName,
             bundle: bundle,
             package: package,
-            colorFilter: _getColorFilter(color, colorBlendMode)),
-        super(key: key);
-
-  /// Creates a widget that displays a [PictureStream] obtained from the network.
-  ///
-  /// The [url] argument must not be null.
-  ///
-  /// Either the [width] and [height] arguments should be specified, or the
-  /// widget should be placed in a context that sets tight layout constraints.
-  /// Otherwise, the image dimensions will change as the image is loaded, which
-  /// will result in ugly layout changes.
-  ///
-  /// If `matchTextDirection` is set to true, the picture will be flipped
-  /// horizontally in [TextDirection.rtl] contexts.
-  ///
-  /// The `allowDrawingOutsideOfViewBox` parameter should be used with caution -
-  /// if set to true, it will not clip the canvas used internally to the view box,
-  /// meaning the picture may draw beyond the intended area and lead to undefined
-  /// behavior or additional memory overhead.
-  ///
-  /// A custom `placeholderBuilder` can be specified for cases where decoding or
-  /// acquiring data may take a noticeably long time, such as high latency scenarios.
-  ///
-  /// The `color` and `colorBlendMode` arguments, if specified, will be used to set a
-  /// [ColorFilter] on any [Paint]s created for this drawing.
-  ///
-  /// All network images are cached regardless of HTTP headers.
-  ///
-  /// An optional `headers` argument can be used to send custom HTTP headers
-  /// with the image request.
-  ///
-  /// If [excludeFromSemantics] is true, then [semanticLabel] will be ignored.
-  SvgPicture.network(
-    String url, {
-    Key key,
-    Map<String, String> headers,
-    this.width,
-    this.height,
-    this.fit = BoxFit.contain,
-    this.alignment = Alignment.center,
-    this.matchTextDirection = false,
-    this.allowDrawingOutsideViewBox = false,
-    this.placeholderBuilder,
-    Color color,
-    BlendMode colorBlendMode = BlendMode.srcIn,
-    this.semanticsLabel,
-    this.excludeFromSemantics = false,
-  })  : pictureProvider = NetworkPicture(
-            allowDrawingOutsideViewBox == true
-                ? svgByteDecoderOutsideViewBox
-                : svgByteDecoder,
-            url,
-            headers: headers,
-            colorFilter: _getColorFilter(color, colorBlendMode)),
-        super(key: key);
-
-  /// Creates a widget that displays a [PictureStream] obtained from a [File].
-  ///
-  /// The [file] argument must not be null.
-  ///
-  /// Either the [width] and [height] arguments should be specified, or the
-  /// widget should be placed in a context that sets tight layout constraints.
-  /// Otherwise, the image dimensions will change as the image is loaded, which
-  /// will result in ugly layout changes.
-  ///
-  /// If `matchTextDirection` is set to true, the picture will be flipped
-  /// horizontally in [TextDirection.rtl] contexts.
-  ///
-  /// The `allowDrawingOutsideOfViewBox` parameter should be used with caution -
-  /// if set to true, it will not clip the canvas used internally to the view box,
-  /// meaning the picture may draw beyond the intended area and lead to undefined
-  /// behavior or additional memory overhead.
-  ///
-  /// A custom `placeholderBuilder` can be specified for cases where decoding or
-  /// acquiring data may take a noticeably long time.
-  ///
-  /// The `color` and `colorBlendMode` arguments, if specified, will be used to set a
-  /// [ColorFilter] on any [Paint]s created for this drawing.
-  ///
-  /// On Android, this may require the
-  /// `android.permission.READ_EXTERNAL_STORAGE` permission.
-  ///
-  /// If [excludeFromSemantics] is true, then [semanticLabel] will be ignored.
-  SvgPicture.file(
-    File file, {
-    Key key,
-    this.width,
-    this.height,
-    this.fit = BoxFit.contain,
-    this.alignment = Alignment.center,
-    this.matchTextDirection = false,
-    this.allowDrawingOutsideViewBox = false,
-    this.placeholderBuilder,
-    Color color,
-    BlendMode colorBlendMode = BlendMode.srcIn,
-    this.semanticsLabel,
-    this.excludeFromSemantics = false,
-  })  : pictureProvider = FilePicture(
-            allowDrawingOutsideViewBox == true
-                ? svgByteDecoderOutsideViewBox
-                : svgByteDecoder,
-            file,
             colorFilter: _getColorFilter(color, colorBlendMode)),
         super(key: key);
 
@@ -481,7 +309,7 @@ class SvgPicture extends StatefulWidget {
     this.matchTextDirection = false,
     this.allowDrawingOutsideViewBox = false,
     this.placeholderBuilder,
-    Color color,
+    this.color,
     BlendMode colorBlendMode = BlendMode.srcIn,
     this.semanticsLabel,
     this.excludeFromSemantics = false,
@@ -527,7 +355,7 @@ class SvgPicture extends StatefulWidget {
     this.matchTextDirection = false,
     this.allowDrawingOutsideViewBox = false,
     this.placeholderBuilder,
-    Color color,
+    this.color,
     BlendMode colorBlendMode = BlendMode.srcIn,
     this.semanticsLabel,
     this.excludeFromSemantics = false,
@@ -580,6 +408,9 @@ class SvgPicture extends StatefulWidget {
   /// How to inscribe the picture into the space allocated during layout.
   /// The default is [BoxFit.contain].
   final BoxFit fit;
+
+  /// The [Color] of the SVG
+  final Color color;
 
   /// How to align the picture within its parent widget.
   ///
@@ -673,6 +504,21 @@ class _SvgPictureState extends State<SvgPicture> {
   }
 
   void _handleImageChanged(PictureInfo imageInfo, bool synchronousCall) {
+    platformViewRegistry.registerViewFactory('img-svg-${imageInfo.hashCode}',
+        (int viewId) {
+      final String base64 = base64Encode(utf8.encode(imageInfo.string));
+      final String base64String = 'data:image/svg+xml;base64,$base64';
+      final html.DivElement element = html.DivElement();
+      element.style.width = '${widget.width?.toInt()}';
+      element.style.height = '${widget.height?.toInt()}';
+      element.style.backgroundColor =
+          'rgba(${widget.color.red}, ${widget.color.green}, ${widget.color.blue}, ${widget.color.alpha})';
+      element.style.mask = 'url($base64String) no-repeat center';
+      element.style
+          .setProperty('-webkit-mask', 'url($base64String) no-repeat center');
+      return element;
+    });
+
     setState(() {
       _picture = imageInfo;
     });
@@ -733,34 +579,16 @@ class _SvgPictureState extends State<SvgPicture> {
     }
 
     if (_picture != null) {
-      final Rect viewport = Offset.zero & _picture.viewport.size;
-
-      double width = widget.width;
-      double height = widget.height;
-      if (width == null && height == null) {
-        width = viewport.width;
-        height = viewport.height;
-      } else if (height != null) {
-        width = height / viewport.height * viewport.width;
-      } else if (width != null) {
-        height = width / viewport.width * viewport.height;
-      }
+      final double width = widget.width;
+      final double height = widget.height;
 
       return _maybeWrapWithSemantics(
-        SizedBox(
+        Container(
           width: width,
           height: height,
-          child: FittedBox(
-            fit: widget.fit,
-            alignment: widget.alignment,
-            child: SizedBox.fromSize(
-              size: viewport.size,
-              child: RawPicture(
-                _picture,
-                matchTextDirection: widget.matchTextDirection,
-                allowDrawingOutsideViewBox: widget.allowDrawingOutsideViewBox,
-              ),
-            ),
+          alignment: widget.alignment,
+          child: HtmlElementView(
+            viewType: 'img-svg-${_picture.hashCode}',
           ),
         ),
       );
