@@ -88,7 +88,7 @@ typedef PictureListener = Function(PictureInfo image, bool synchronousCall);
 ///
 ///  * [PictureProvider], which has an example that includes the use of an
 ///    [PictureStream] in a [Widget].
-class PictureStream extends Diagnosticable {
+class PictureStream {
   /// Create an initially unbound image stream.
   ///
   /// Once an [PictureStreamCompleter] is available, call [setCompleter].
@@ -164,26 +164,6 @@ class PictureStream extends Diagnosticable {
   /// potentially being the same as others'. No notification is sent when this
   /// happens.
   Object get key => _completer != null ? _completer : this;
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(ObjectFlagProperty<PictureStreamCompleter>(
-      'completer',
-      _completer,
-      ifPresent: _completer?.toStringShort(),
-      ifNull: 'unresolved',
-    ));
-    properties.add(ObjectFlagProperty<List<_PictureListenerPair>>(
-      'listeners',
-      _listeners,
-      ifPresent:
-          '${_listeners?.length} listener${_listeners?.length == 1 ? "" : "s"}',
-      ifNull: 'no listeners',
-      level: _completer != null ? DiagnosticLevel.hidden : DiagnosticLevel.info,
-    ));
-    _completer?.debugFillProperties(properties);
-  }
 }
 
 /// Base class for those that manage the loading of [dart:ui.Picture] objects for
@@ -192,7 +172,7 @@ class PictureStream extends Diagnosticable {
 /// [PictureStreamListener] objects are rarely constructed directly. Generally, an
 /// [PictureProvider] subclass will return an [PictureStream] and automatically
 /// configure it with the right [PictureStreamCompleter] when possible.
-abstract class PictureStreamCompleter extends Diagnosticable {
+abstract class PictureStreamCompleter {
   final List<_PictureListenerPair> _listeners = <_PictureListenerPair>[];
   PictureInfo _current;
 
@@ -259,21 +239,6 @@ abstract class PictureStreamCompleter extends Diagnosticable {
       stack: stack,
       library: 'SVG',
       context: context,
-    ));
-  }
-
-  /// Accumulates a list of strings describing the object's state. Subclasses
-  /// should override this to have their information included in [toString].
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder description) {
-    super.debugFillProperties(description);
-    description.add(DiagnosticsProperty<PictureInfo>('current', _current,
-        ifNull: 'unresolved', showName: false));
-    description.add(ObjectFlagProperty<List<_PictureListenerPair>>(
-      'listeners',
-      _listeners,
-      ifPresent:
-          '${_listeners?.length} listener${_listeners?.length == 1 ? "" : "s"}',
     ));
   }
 }
