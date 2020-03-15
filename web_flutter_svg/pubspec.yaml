@@ -15,7 +15,7 @@ dependencies:
   flutter_svg_platform_interface:
     git:
       url: https://github.com/MaximilianKlein/flutter_svg.git
-      ref: "6e37ec8742c1d5d82fb5126f26357da5e9546021"
+      ref: "83b8b26"
       path: flutter_svg_platform_interface
 
 dev_dependencies:
